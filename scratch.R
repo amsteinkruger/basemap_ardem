@@ -1,9 +1,9 @@
 # Trying out ARDEM 2.0. 
 
+# so -- instead of cropping to alaska (eez), crop to lat/lon bounds on Alaska Albers (EPSG:3338) for a nice slice shape
+
 # Get packages.
 
-library(ncdf4) # netcdf manipulation
-library(raster) # raster manipulation
 library(sf) # vector manipulation
 library(nngeo) # specialized vector operations
 library(ggplot2) # plotting
@@ -14,6 +14,10 @@ library(magrittr) # pipes
 
 library(terra)
 library(tidyterra)
+
+# Get one more package to set up overlaid figures.
+
+library(cowplot)
 
 # Get raster.
 
@@ -71,18 +75,24 @@ dat_less =
   crop(dat_crop) %>% 
   mask(dat_mask)
 
-# Get raster set up for ggplot2.
-
-dat_frame = dat_less %>% as.data.frame(xy = TRUE)
-
 # Get visualization.
 
 elevation_max = 6000 # dat_frame$z %>% max
 elevation_min = -8000 # dat_frame$z %>% min
-elevation_vec = c(elevation_min, 0, 1, elevation_max)
-elevation_col = c("white", "#0F204B", "#FFB612", "white")
+elevation_vec = c(elevation_min, 
+                  0, 
+                  1, 
+                  elevation_max)
+elevation_col = c("white", 
+                  "#0F204B", 
+                  "#FFB612", 
+                  "white")
+elevation_gra = c("white", 
+                  colorspace::desaturate("#0F204B"), 
+                  colorspace::desaturate("#FFB612"), 
+                  "white")
 
-vis = 
+vis_1 = 
   ggplot() +
   geom_spatraster(data = dat_less,
                   maxcell = Inf) + # Resampling breaks sea level, which is silly.
@@ -101,19 +111,34 @@ vis =
   labs(fill = "Meters From Sea Level") +
   theme_void()
 
-# geom_spatraster(data = dat_oob %>% clamp(upper = 0, value = FALSE),
-#                 fill = "grey75",
-#                 na.value = "transparent",
-#                 maxcell = 100) +
-# geom_spatraster(data = dat_oob %>% clamp(lower = 0, value = FALSE),
-#                 fill = "grey25",
-#                 maxcell = 100) +
+vis_2 = 
+  ggplot() +
+  geom_spatraster(data = dat_oob,
+                  maxcell = Inf) +
+  scale_fill_gradientn(limits = c(elevation_min, elevation_max),
+                       breaks = c(elevation_min, 0, elevation_max),
+                       values = scales::rescale(elevation_vec),
+                       colors = elevation_gra,
+                       na.value = "transparent",
+                       guide = 
+                         guide_colorbar(direction = "horizontal",
+                                        position = "bottom",
+                                        # barheight = ,
+                                        # barwidth = ,
+                                        frame.colour = "black",
+                                        ticks.colour = NA)) +
+  labs(fill = "Meters From Sea Level") +
+  theme_void()
 
-# layer over ggplots
+vis = 
+  ggdraw() +
+  draw_plot(vis_2) +
+  draw_plot(vis_1) 
 
-# trick: add third layer of masking on latitude, longitude to get mask following Ardem folded globe visualization
+# Export.
 
 ggsave("vis.png",
        vis,
        dpi = 300,
-       width = 6.5)
+       width = 6.5,
+       bg = "transparent")
