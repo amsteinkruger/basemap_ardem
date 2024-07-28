@@ -1,5 +1,37 @@
-# Trying out ARDEM 2.0. 
+# Basemaps with ARDEM 2.0
 
+
+# Introduction
+
+Creating a map of Alaska is a pain. This demo illustrates a minimal
+basemap workflow built on two geospatial resources. The first resource
+is a specialized digital elevation model, ARDEM 2.0, developed by
+researchers at the University of Alaska, Fairbanks (et al.). The second
+resource is a specialized equal-area conic projection, Alaska Albers
+(EPSG 3338).
+
+# Results
+
+<img src="vis.png"
+data-fig-alt="This is a minimal basemap of Alaska." />
+
+# References
+
+Danielson, S. L., Dobbins, E. L., Jakobsson, M., Johnson, M. A.,
+Weingartner, T. J., Williams, W. J., & Zarayskaya, Y. (2015). Sounding
+the northern seas. *Eos*, 96(10.1029).
+
+Flanders Marine Institute (2023). Maritime Boundaries Geodatabase:
+Maritime Boundaries and Exclusive Economic Zones (200NM), Version 12.
+Available online at https://www.marineregions.org/.
+https://doi.org/10.14284/632.
+
+Office for Coastal Management, 2024: Coastal States,
+https://www.fisheries.noaa.gov/inport/item/66116.
+
+# Work
+
+``` r
 # Get packages.
 
 library(sf) # vector manipulation
@@ -22,7 +54,7 @@ library(cowplot)
 dat_raster = 
   "data/ARDEMv2.0.nc" %>% 
   rast %>% 
-  filter(x > 166, x < 232, y > 47, y < 75.75) %>%
+  filter(x > 166, x < 232, y > 47, y < 75.75) %>% # Pick bounds by hand.
   trim %>% 
   project("EPSG:3338")
 
@@ -38,7 +70,7 @@ vec_alaska =
   st_transform("EPSG:3338") %>% 
   st_union
 
-#  Alaska's EEZ boundaries retrieved from marineregions.org, provided by the Flanders Marine Institute.
+#  EEZ boundaries off Alaska retrieved from marineregions.org, provided by the Flanders Marine Institute.
 
 vec_eez = 
   "data/World_EEZ_v12_20231025" %>% 
@@ -100,7 +132,7 @@ dat_them =
   dat_raster %>% 
   mask(dat_mask, inverse = TRUE)
 
-# Get visualization in Alaska's colors.
+# Work out a palette scaled to elevations of itnerest.
 
 elevation_max = minmax(dat_raster)[[2]]
 elevation_min = minmax(dat_raster)[[1]]
@@ -108,19 +140,29 @@ elevation_vec = c(elevation_min,
                   0, 
                   1, 
                   elevation_max)
-elevation_us = c("black", 
-                  "#0F204B", 
-                  "#FFB612", 
-                  "white")
-elevation_them = c("black", 
-                  colorspace::desaturate("#0F204B"), 
-                  colorspace::desaturate("#FFB612"), 
-                  "white")
+elevation_us = c("grey50",
+                 "#D8F0F5", # "#90DAEE",
+                 "#EBE2C8", # "#BCF0D1",
+                 "white")
+elevation_them = c("grey50",
+                   colorspace::desaturate("#D8F0F5", 0.95),
+                   colorspace::desaturate("#EBE2C8", 0.95),
+                   "white")
+
+# Get a visualization in NOAA Coast Survey colors. 
+
+#  Visualize Alaska and the US EEZ.
 
 vis_us = 
   ggplot() +
   geom_spatraster(data = dat_us,
-                  maxcell = Inf) + # Resampling breaks sea level, which is silly.
+                  maxcell = Inf) + # This prevents resampling, improving resolution at a performance cost.
+  geom_spatvector(data = dat_mask,
+                  color = colorspace::darken("#D8F0F5", 0.50),
+                  fill = NA) +
+  geom_spatvector(data = dat_mask_ak,
+                  color = colorspace::darken("#EBE2C8", 0.25),
+                  fill = NA) +
   scale_fill_gradientn(limits = c(elevation_min, elevation_max),
                        breaks = c(elevation_min, 0, elevation_max),
                        values = scales::rescale(elevation_vec),
@@ -133,76 +175,11 @@ vis_us =
                                         ticks.colour = NA)) +
   labs(fill = "Meters From Sea Level") +
   theme_void() +
-  theme(legend.position = "none")
+  theme(legend.position = "none") # Legend is sort of implemented but also hidden.
+
+#  Visualize everywhere else.
 
 vis_them = 
-  ggplot() +
-  geom_spatraster(data = dat_them,
-                  maxcell = Inf) +
-  scale_fill_gradientn(limits = c(elevation_min, elevation_max),
-                       breaks = c(elevation_min, 0, elevation_max),
-                       values = scales::rescale(elevation_vec),
-                       colors = elevation_them,
-                       na.value = "transparent",
-                       guide = 
-                         guide_colorbar(direction = "horizontal",
-                                        position = "bottom",
-                                        frame.colour = "black",
-                                        ticks.colour = NA)) +
-  labs(fill = "Meters From Sea Level") +
-  theme_void() +
-  theme(legend.position = "none")
-
-vis = 
-  ggdraw() +
-  draw_plot(vis_them) +
-  draw_plot(vis_us) 
-
-# Export.
-
-ggsave("vis.png",
-       vis,
-       dpi = 300,
-       width = 6.5,
-       bg = "transparent")
-
-# Get visualization in NOAA Coast Survey colors. # Google Maps
-
-elevation_us_base = c("grey50",
-                      "#D8F0F5", # "#90DAEE",
-                      "#EBE2C8", # "#BCF0D1",
-                      "white")
-elevation_them_base = c("grey50",
-                        colorspace::desaturate("#D8F0F5", 0.95),
-                        colorspace::desaturate("#EBE2C8", 0.95),
-                        "white")
-
-
-vis_us_base = 
-  ggplot() +
-  geom_spatraster(data = dat_us,
-                  maxcell = Inf) + # Resampling breaks sea level, which is silly.
-  geom_spatvector(data = dat_mask,
-                  color = colorspace::darken("#D8F0F5", 0.25),
-                  fill = NA) +
-  geom_spatvector(data = dat_mask_ak,
-                  color = colorspace::darken("#EBE2C8", 0.25),
-                  fill = NA) +
-  scale_fill_gradientn(limits = c(elevation_min, elevation_max),
-                       breaks = c(elevation_min, 0, elevation_max),
-                       values = scales::rescale(elevation_vec),
-                       colors = elevation_us_base,
-                       na.value = "transparent",
-                       guide = 
-                         guide_colorbar(direction = "horizontal",
-                                        position = "bottom",
-                                        frame.colour = "black",
-                                        ticks.colour = NA)) +
-  labs(fill = "Meters From Sea Level") +
-  theme_void() +
-  theme(legend.position = "none")
-
-vis_them_base = 
   ggplot() +
   geom_spatraster(data = dat_them,
                   maxcell = Inf) +
@@ -215,7 +192,7 @@ vis_them_base =
   scale_fill_gradientn(limits = c(elevation_min, elevation_max),
                        breaks = c(elevation_min, 0, elevation_max),
                        values = scales::rescale(elevation_vec),
-                       colors = elevation_them_base,
+                       colors = elevation_them,
                        na.value = "transparent",
                        guide = 
                          guide_colorbar(direction = "horizontal",
@@ -224,17 +201,21 @@ vis_them_base =
                                         ticks.colour = NA)) +
   labs(fill = "Meters From Sea Level") +
   theme_void() +
-  theme(legend.position = "none")
+  theme(legend.position = "none") # Legend is sort of implemented but also hidden.
 
-vis_base = 
+#  Combine for export.
+
+vis = 
   ggdraw() +
-  draw_plot(vis_them_base) +
-  draw_plot(vis_us_base)
+  draw_plot(vis_them) +
+  draw_plot(vis_us)
 
 # Export.
 
-ggsave("vis_base.png",
-       vis_base,
+ggsave("vis.png",
+       vis,
        dpi = 300,
        width = 6.5,
+       height = 6.0,
        bg = "transparent")
+```
